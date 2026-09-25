@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snake • Arcade</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#101820;color:#edf7ee;font-family:system-ui,sans-serif;padding:24px}
+main{width:min(100%,520px)}header{display:flex;align-items:center;justify-content:space-between;gap:16px}h1{font-size:42px;margin:0;color:#b7ef75}small{letter-spacing:3px;color:#8caaa0}#score{font-size:24px;font-weight:700}
+canvas{display:block;width:100%;aspect-ratio:1;background:#16251f;border:2px solid #42634c;border-radius:12px;margin:20px 0;image-rendering:pixelated}
+#status{min-height:48px;line-height:1.5}button{border:0;border-radius:9px;background:#b7ef75;color:#142218;padding:12px 20px;font:inherit;font-weight:700;cursor:pointer}button:hover{background:#d0ff9b}button:focus-visible{outline:3px solid white;outline-offset:4px}button:disabled{opacity:.45;cursor:default}
+.actions{display:flex;gap:12px}.controls{display:grid;grid-template-columns:repeat(3,56px);gap:6px;justify-content:center;margin:20px 0}.controls button{padding:12px}.up{grid-column:2}.left{grid-column:1}
+.help{font-size:14px;color:#aac1b5;line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+<header><div><small>POCKET ARCADE</small><h1>Snake</h1></div><div id="score">Score: 0</div></header>
+<canvas id="board" width="480" height="480" role="img" aria-label="Snake game board. Use arrow keys or WASD to steer."></canvas>
+<p id="status" role="status" aria-live="polite">Eat the coral snacks. Avoid the walls and your own tail.</p>
+<div class="actions"><button id="start">Start game</button><button id="pause" disabled>Pause</button></div>
+<div class="controls" aria-label="Direction controls">
+<button class="up" data-dir="up" aria-label="Move up">↑</button>
+<button class="left" data-dir="left" aria-label="Move left">←</button>
+<button data-dir="down" aria-label="Move down">↓</button>
+<button data-dir="right" aria-label="Move right">→</button>
+</div>
+<p class="help">Arrow keys or WASD to move. Space to pause. Use the arrow buttons on a phone. Every snack adds 10 points and makes you faster.<br>To play: download this file as snake.html and open it in your browser. No installation needed.</p>
+</main>
+<script>
+"use strict";
+const board = document.getElementById("board"), ctx = board.getContext("2d");
+const scoreLabel = document.getElementById("score"), statusLabel = document.getElementById("status");
+const startButton = document.getElementById("start"), pauseButton = document.getElementById("pause");
+const SIZE = 20, CELL = board.width / SIZE;
+const directions = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
+let snake, direction, pending, food, score, running = false, paused = false, timer;
+function placeFood() {
+  const empty = [];
+  for (let y=0;y<SIZE;y++) for (let x=0;x<SIZE;x++)
+    if (!snake.some(p=>p.x===x && p.y===y)) empty.push({x,y});
+  return empty.length ? empty[Math.floor(Math.random()*empty.length)] : null;
+}
+function draw() {
+  ctx.fillStyle="#16251f"; ctx.fillRect(0,0,board.width,board.height);
+  ctx.strokeStyle="#20352a"; ctx.lineWidth=1;
+  for(let i=1;i<SIZE;i++) {
+    ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,board.height);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(board.width,i*CELL);ctx.stroke();
+  }
+  if(food) {
+    ctx.fillStyle="#ff8775";ctx.beginPath();
+    ctx.arc((food.x+.5)*CELL,(food.y+.5)*CELL,CELL*.34,0,Math.PI*2);ctx.fill();
+  }
+  snake.forEach((p,i)=>{
+    ctx.fillStyle=i===0?"#d4ffa7":"#86c958";ctx.fillRect(p.x*CELL+2,p.y*CELL+2,CELL-4,CELL-4);
+  });
+}
+function reset() {
+  clearTimeout(timer);snake=[{x:7,y:10},{x:6,y:10},{x:5,y:10}];
+  direction=directions.right;pending=null;score=0;food=placeFood();
+  scoreLabel.textContent="Score: 0";paused=false;pauseButton.textContent="Pause";draw();
+}
+function schedule() { timer=setTimeout(step,Math.max(65,155-score/5)); }
+function end(message) {
+  running=false;clearTimeout(timer);pauseButton.disabled=true;
+  statusLabel.textContent=message;startButton.textContent="Play again";
+}
+function step() {
+  if(!running || paused) return;
+  if(pending) {direction=pending;pending=null;}
+  const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+  const eating=food && head.x===food.x && head.y===food.y;
+  const body=eating ? snake : snake.slice(0,-1);
+  if(head.x<0 || head.y<0 || head.x>=SIZE || head.y>=SIZE || body.some(p=>p.x===head.x && p.y===head.y)) {
+    end("Game over! Final score: "+score+". Press Play again for another round.");return;
+  }
+  snake.unshift(head);
+  if(eating) {
+    score+=10;scoreLabel.textContent="Score: "+score;food=placeFood();
+    if(!food) {draw();end("You win! You filled the board. Score: "+score);return;}
+  } else snake.pop();
+  draw();schedule();
+}
+function steer(name) {
+  if(!running || paused || pending) return;
+  const next=directions[name];
+  if(next && !(next.x===-direction.x && next.y===-direction.y)) pending=next;
+}
+function togglePause() {
+  if(!running) return;
+  paused=!paused;clearTimeout(timer);
+  pauseButton.textContent=paused?"Resume":"Pause";
+  statusLabel.textContent=paused?"Paused. Press Resume or Space to continue.":"Keep going! Eat snacks and avoid the walls.";
+  if(!paused) schedule();
+}
+startButton.addEventListener("click",()=>{
+  reset();running=true;pauseButton.disabled=false;startButton.textContent="Restart";
+  statusLabel.textContent="Go! Eat snacks and avoid the walls.";schedule();
+});
+pauseButton.addEventListener("click",togglePause);
+document.querySelectorAll("[data-dir]").forEach(button=>button.addEventListener("click",()=>steer(button.dataset.dir)));
+document.addEventListener("keydown",event=>{
+  if(event.ctrlKey || event.metaKey || event.altKey) return;
+  const key=event.key.toLowerCase();
+  const mapped={arrowup:"up",w:"up",arrowdown:"down",s:"down",arrowleft:"left",a:"left",arrowright:"right",d:"right"}[key];
+  if(mapped) {event.preventDefault();steer(mapped);}
+  else if(event.code==="Space" && event.target.tagName!=="BUTTON") {event.preventDefault();togglePause();}
+});
+document.addEventListener("visibilitychange",()=>{if(document.hidden && running && !paused) togglePause();});
+reset();
+</script>
+</body>
+</html>
